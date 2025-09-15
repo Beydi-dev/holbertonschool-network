@@ -1,4 +1,5 @@
 #!/bin/bash
 # script that displays listening ports
 
-netstat -lp
+netstat -tulp
+netstat -lxp
