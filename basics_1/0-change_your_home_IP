@@ -1,28 +1,25 @@
 #!/usr/bin/env bash
-# 0-change_your_home_IP
-# Script to change localhost and facebook.com entries in /etc/hosts on Ubuntu
+# Configure /etc/hosts so localhost -> 127.0.0.2 and facebook.com -> 8.8.8.8 (idempotent, IPv6-safe)
 
+set -euo pipefail
+IFS=$'\n\t'
 
-if [[ $EUID -ne 0 ]]; then
-  echo "This script must be run as root (use sudo)."
-  exit 1
-fi
+tmp="$(mktemp)"
+# 1) repartir de /etc/hosts en retirant les tokens 'localhost' et 'facebook.com' (y compris sur ::1)
+awk '
+  /^[[:space:]]*#/ { print; next }
+  {
+    out=$1
+    for (i=2; i<=NF; i++) {
+      if ($i != "localhost" && $i != "facebook.com") out=out" "$i
+    }
+    print out
+  }
+' /etc/hosts > "$tmp"
 
-HOSTS_FILE="/etc/hosts"
-BACKUP_FILE="/etc/hosts.bak.$(date +%Y-%m-%d_%H-%M-%S)"
+# 2) préfixer nos deux mappages pour leur donner la priorité
+{ printf '127.0.0.2 localhost\n8.8.8.8 facebook.com\n'; cat "$tmp"; } > "${tmp}.new"
 
-# Backup current /etc/hosts
-cp "$HOSTS_FILE" "$BACKUP_FILE"
-echo "Backup of /etc/hosts saved to $BACKUP_FILE"
-
-update_host_entry() {
-  local ip="$1"
-  local name="$2"
-  echo -e "$ip\t$name" >> "$HOSTS_FILE"
-}
-
-update_host_entry "127.0.0.2" "localhost"
-update_host_entry "8.8.8.8" "facebook.com"
-
-echo "Updated /etc/hosts entries:"
-grep -E "localhost|facebook.com" "$HOSTS_FILE"
+# 3) remplacer silencieusement
+cp "${tmp}.new" /etc/hosts
+rm -f "$tmp" "${tmp}.new"
